@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Suivi comptabilité</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mu:#667085;--bd:#e3e6eb;--ac:#1f6feb;--ok:#15803d;--ko:#c2410c}
+@media(prefers-color-scheme:dark){:root{--bg:#14171c;--card:#1d2127;--tx:#e8eaed;--mu:#9aa3af;--bd:#2d333b;--ac:#6ea8ff;--ok:#4ade80;--ko:#fb923c}}
+*{box-sizing:border-box}body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:16px}
+h1{font-size:20px;margin:0 0 12px}.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+button,select{font:inherit;padding:6px 12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:6px;cursor:pointer}
+button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.k{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px 12px}.c b{display:block;font-size:18px;margin-top:2px}.c span{color:var(--mu);font-size:12px}
+details{margin-bottom:12px}summary{cursor:pointer;color:var(--mu)}
+.cfg{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}.cfg label{font-size:12px;color:var(--mu)}.cfg input{display:block;width:90px}
+.w{overflow-x:auto;background:var(--card);border:1px solid var(--bd);border-radius:8px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}th,td{padding:4px 6px;border-bottom:1px solid var(--bd);text-align:right}
+th{position:sticky;top:0;background:var(--card);font-size:11px;color:var(--mu);font-weight:600}th:first-child,td:first-child{text-align:left}
+td input{width:72px;text-align:right;font:inherit;padding:3px 4px;border:1px solid transparent;background:transparent;color:var(--tx);border-radius:4px}
+td input:hover,td input:focus{border-color:var(--bd);background:var(--bg)}td input.m{width:110px;text-align:left}
+.g{background:rgba(127,127,127,.06)}.pos{color:var(--ok)}.neg{color:var(--ko)}.x{border:0;color:var(--mu);padding:2px 6px}
+tfoot td{font-weight:600}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.55);overflow:auto;padding:16px;z-index:9}
+#sheet{background:#fff;color:#111;max-width:800px;margin:0 auto;padding:36px 44px;font:13px "Trebuchet MS",sans-serif;box-shadow:0 4px 24px rgba(0,0,0,.3)}
+#sheet h2{color:#0C3A73;font-size:30px;margin:0}#sheet .hd{display:flex;justify-content:space-between;align-items:flex-start}
+#sheet table{width:100%;border-collapse:collapse;margin-top:18px}#sheet th{background:#3E71AD;color:#fff;text-align:left;padding:6px 8px;position:static;font-size:13px}
+#sheet td{padding:6px 8px;border:1px solid #C5D9F0;text-align:left;vertical-align:top}#sheet td:not(:first-child){text-align:right}
+#sheet .two td{text-align:left}#sheet .tot{width:50%;margin-left:50%}#sheet .tot td:first-child{background:#C5D9F0;font-weight:700;text-align:left}
+#sheet .ft{margin-top:30px;font-size:10px;color:#444;text-align:center;border-top:2px solid #3E71AD;padding-top:8px;display:flex;align-items:center;gap:12px;justify-content:center}
+#sheet [contenteditable]:hover,#sheet [contenteditable]:focus{outline:1px dashed #3E71AD}
+.np{max-width:800px;margin:0 auto 10px;display:flex;gap:8px;align-items:center;color:#fff}
+@media print{body{padding:0;background:#fff}body>*:not(#ov){display:none!important}#ov{position:static;background:none;padding:0}.np{display:none}#sheet{box-shadow:none;padding:0}@page{margin:14mm}}
+</style></head><body>
+<h1>Suivi comptabilité</h1>
+<div class="bar"><select id="yr"></select><button class="p" id="add">+ Ajouter un mois</button><button id="csv">Export CSV</button><button id="exp">Sauvegarde JSON</button><button id="imp">Importer JSON</button><button id="rst">Tout effacer</button><input type="file" id="f" accept=".json" hidden></div>
+<div class="k" id="kp"></div>
+<details><summary>Paramètres de calcul</summary><div class="cfg" id="cfg"></div></details>
+<p id="em" class="c" hidden>Aucune donnée. Cliquez sur « Importer JSON » pour charger vos données, ou sur « + Ajouter un mois » pour commencer.</p>
+<div class="w"><table><thead id="th"></thead><tbody id="tb"></tbody><tfoot id="tf"></tfoot></table></div>
+<div id="ov" hidden><div class="np"><button class="p" id="pr">Imprimer / PDF</button><button id="cl">Fermer</button><span>Les textes de la facture sont modifiables directement.</span></div><div id="sheet"></div></div>
+<script>
+const DEF={cfg:{sam:12.5,dim:17,act:106.87,soir:4.7,tva:20,com:9},inv:{name:'',emit:'',client:'',foot:'',logo:'',stamp:''},rows:[]};
+const LS='suivi_compta_v1',$=id=>document.getElementById(id);
+const num=v=>parseFloat(v)||0;
+function norm(d){if(!d||!Array.isArray(d.rows))return null;return{cfg:Object.assign({},DEF.cfg,d.cfg),inv:Object.assign({},DEF.inv,d.inv),
+ rows:d.rows.filter(r=>r&&/^\d{4}-\d{2}$/.test(r.m)).map(r=>({m:r.m,j:num(r.j),so:num(r.so),sa:num(r.sa),di:num(r.di),ac:num(r.ac),tjm:num(r.tjm),fr:num(r.fr),sal:num(r.sal),cout:num(r.cout),paye:num(r.paye)}))}}
+let S;try{S=norm(JSON.parse(localStorage.getItem(LS)))}catch(e){}if(!S)S=norm(DEF);
+let warned=0;const save=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){if(!warned++)alert('Enregistrement impossible dans le navigateur (stockage plein ou désactivé). Faites une sauvegarde JSON.')}};
+const IN=[['m','Mois','month'],['j','Jours trav.'],['tjm','TJM'],['so','Astr. soir'],['sa','Astr. sam.'],['di','Astr. dim/fér.'],['ac','Astr. active'],['fr','Frais déduits'],['sal','Salaire BP'],['cout','Coût salaire BP'],['paye','Payé']];
+const OUT=[['ht','HT'],['ttc','TTC'],['brut','Brut'],['rbp','Reste % BP'],['tot','Total à payer'],['rest','Reste']];
+const CF=[['sam','€/h samedi'],['dim','€/h dim./férié'],['act','€ astr. active'],['soir','€ astr. soir'],['tva','TVA %'],['com','Commission %']];
+const n=v=>parseFloat(v)||0,eur=v=>v.toLocaleString('fr-FR',{style:'currency',currency:'EUR'});
+function calc(r){const c=S.cfg,tt=n(r.j)*n(r.tjm),ta=n(r.sa)*c.sam+n(r.di)*c.dim+n(r.ac)*c.act+n(r.so)*c.soir,ht=tt+ta,hf=ht-n(r.fr),brut=hf*(1-c.com/100),rbp=brut-n(r.cout),tot=rbp+n(r.sal);return{ht,ttc:ht*(1+c.tva/100),brut,rbp,tot,rest:tot-n(r.paye)}}
+function head(){$('th').innerHTML='<tr>'+IN.concat(OUT).map(x=>'<th>'+x[1]+'</th>').join('')+'<th></th></tr>'}
+function build(){
+ $('cfg').innerHTML=CF.map(([k,l])=>`<label>${l}<input type="number" step="any" data-c="${k}" value="${S.cfg[k]}"></label>`).join('');
+ $('tb').innerHTML=S.rows.map((r,i)=>`<tr data-i="${i}">`+IN.map(([k,,t])=>`<td><input class="${k=='m'?'m':''}" type="${t||'number'}" step="any" data-k="${k}" value="${r[k]}"></td>`).join('')+OUT.map(([k])=>`<td class="g" data-o="${k}"></td>`).join('')+'<td><button class="x f" title="Générer la facture">🧾</button><button class="x" title="Supprimer">✕</button></td></tr>').join('');
+ years()}
+function years(){const ys=[...new Set(S.rows.map(r=>r.m.slice(0,4)))].sort(),v=$('yr').value||'all';$('yr').innerHTML='<option value="all">Toutes les années</option>'+ys.map(y=>`<option>${y}</option>`).join('');$('yr').value=ys.includes(v)||v=='all'?v:'all'}
+function refresh(){
+ const y=$('yr').value,T={ht:0,ttc:0,tot:0,paye:0,rest:0};
+ document.querySelectorAll('#tb tr').forEach(tr=>{const r=S.rows[tr.dataset.i],o=calc(r),show=y=='all'||r.m.startsWith(y);tr.hidden=!show;
+  tr.querySelectorAll('[data-o]').forEach(td=>{const v=o[td.dataset.o];td.textContent=eur(v);if(td.dataset.o=='rest')td.className='g '+(v<-.005?'neg':v>.005?'pos':'')});
+  if(show){T.ht+=o.ht;T.ttc+=o.ttc;T.tot+=o.tot;T.paye+=n(r.paye);T.rest+=o.rest}});
+ const K=[['Total HT',T.ht],['Total TTC',T.ttc],['Total à payer',T.tot],['Total payé',T.paye],['Reste à payer',T.rest]];
+ $('kp').innerHTML=K.map(([l,v],i)=>`<div class="c"><span>${l}</span><b class="${i==4?(v>.005?'pos':v<-.005?'neg':''):''}">${eur(v)}</b></div>`).join('');
+ $('tf').innerHTML='';$('em').hidden=S.rows.length>0}
+$('tb').addEventListener('input',e=>{const t=e.target,i=t.closest('tr').dataset.i,k=t.dataset.k;S.rows[i][k]=k=='m'?t.value:n(t.value);save();if(k=='m')years();refresh()});
+$('tb').addEventListener('click',e=>{if(e.target.classList.contains('f'))return inv(e.target.closest('tr').dataset.i);if(e.target.classList.contains('x')&&confirm('Supprimer ce mois ?')){S.rows.splice(e.target.closest('tr').dataset.i,1);save();build();refresh()}});
+$('cfg').addEventListener('input',e=>{S.cfg[e.target.dataset.c]=n(e.target.value);save();refresh()});
+$('yr').onchange=refresh;
+$('add').onclick=()=>{const d=new Date(),l=S.rows[S.rows.length-1]||{m:d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'),tjm:0};let[a,b]=l.m.split('-').map(Number);if(S.rows.length){b++;if(b>12){b=1;a++}}
+ S.rows.push({m:a+'-'+String(b).padStart(2,'0'),j:0,so:0,sa:0,di:0,ac:0,tjm:l.tjm,fr:0,sal:0,cout:0,paye:0});save();build();refresh();window.scrollTo(0,document.body.scrollHeight)};
+function dl(name,txt,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;a.click()}
+$('csv').onclick=()=>{const h=IN.concat(OUT).map(x=>x[1]),L=[h.join(';')];S.rows.forEach(r=>{const o=calc(r);L.push(IN.map(([k])=>String(r[k]).replace('.',',')).concat(OUT.map(([k])=>o[k].toFixed(2).replace('.',','))).join(';'))});dl('suivi_compta.csv','\ufeff'+L.join('\n'),'text/csv')};
+$('exp').onclick=()=>dl('suivi_compta.json',JSON.stringify(S,null,1),'application/json');
+$('imp').onclick=()=>$('f').click();
+$('f').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;f.text().then(t=>{try{const d=norm(JSON.parse(t));if(!d)throw 0;if(S.rows.length&&!confirm('Remplacer les données actuelles par ce fichier ?'))return;S=d;save();build();refresh();alert(d.rows.length+' mois importés.')}catch(x){alert('Fichier JSON invalide')}})};
+$('rst').onclick=()=>{if(confirm('Effacer toutes les données ? (pensez à faire une sauvegarde JSON avant)')){S=norm(DEF);save();build();refresh()}};
+const MO=['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'],E2=v=>v.toLocaleString('fr-FR',{minimumFractionDigits:2,maximumFractionDigits:2})+' €',N2=v=>String(v).replace('.',',');
+function inv(i){const r=S.rows[i],c=S.cfg,[y,m]=r.m.split('-'),o=calc(r),I=S.inv,h=n(r.so)+n(r.sa)+n(r.di),
+ L=[[`Mission ${MO[m-1]} ${y} ${I.name}`,N2(r.j)+' jours',N2(r.tjm)+'€',n(r.j)*n(r.tjm)]];
+ if(h)L.push(['Astreinte',N2(h)+' heures','-',n(r.sa)*c.sam+n(r.di)*c.dim+n(r.so)*c.soir]);
+ if(n(r.ac))L.push(['Astreinte active',N2(r.ac),N2(c.act)+'€',n(r.ac)*c.act]);
+ const d=new Date().toLocaleDateString('fr-FR');
+ $('sheet').innerHTML=`<div class="hd"><div><h2>Facture</h2><div style="font-size:14px;margin-top:6px"><b contenteditable>${y}${m}</b></div><div style="margin-top:4px">Date Facture : <span contenteditable>${d}</span></div></div>${I.logo?`<img src="${I.logo}" width="110">`:''}</div>
+ <table class="two"><tr><th>Émetteur</th><th>Client</th></tr><tr><td contenteditable data-s="emit">${I.emit}</td><td contenteditable data-s="client">${I.client}</td></tr></table>
+ <table><tr><th>Description</th><th style="text-align:right">Quantité</th><th style="text-align:right">Taux</th><th style="text-align:right">Montant HT</th></tr>`+L.map(l=>`<tr><td contenteditable>${l[0]}</td><td>${l[1]}</td><td>${l[2]}</td><td>${E2(l[3])}</td></tr>`).join('')+`</table>
+ <table class="tot"><tr><td>TOTAL HT</td><td>${E2(o.ht)}</td></tr><tr><td>TOTAL TVA (${c.tva}%)</td><td>${E2(o.ht*c.tva/100)}</td></tr><tr><td>TOTAL TTC</td><td>${E2(o.ttc)}</td></tr></table>
+ <div class="ft">${I.stamp?`<img src="${I.stamp}" width="90">`:''}<div contenteditable data-s="foot">${I.foot}</div></div>`;
+ $('ov').hidden=false;$('ov').scrollTop=0}
+$('sheet').addEventListener('input',e=>{const k=e.target.dataset.s;if(k){S.inv[k]=e.target.innerHTML;save()}});
+$('pr').onclick=()=>window.print();$('cl').onclick=()=>$('ov').hidden=true;
+head();build();refresh();
+</script></body></html>
